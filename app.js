@@ -19,7 +19,7 @@ mongoose.connect(mongoURI, {})
         console.error('MongoDB connection error', err);
     });
 
-// Define a schema for mongoose
+// change between mongoose or ferret to use either one
 const UserSchema = new mongoose.Schema({
     name: String,
     email: String,
@@ -27,10 +27,7 @@ const UserSchema = new mongoose.Schema({
     occupation: String,
 });
 
-//Define a schema for fauna
-// const UserSchema = {};
-
-// change mongoose to ferret to use fauna
+// change between mongoose or ferret to use either one
 const User = mongoose.model('User', UserSchema, 'User');
 
 app.get('/getAllUsers', async (req, res) => {
@@ -87,10 +84,7 @@ app.patch('/userByIdAndUpdate/:id', async (req, res) => {
     const { name, email, age, occupation } = req.body;
 
     try {
-        const updatedUser = await User.findByIdAndUpdate(
-        id,
-        { name, email, age, occupation },
-        );
+        const updatedUser = await User.findByIdAndUpdate(id, { name, email, age, occupation });
         if (!updatedUser) {
         return res.status(404).json({ message: 'User not found' });
         }

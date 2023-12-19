@@ -1,66 +1,64 @@
 require('dotenv').config();
 const { FaunaClient } = require('./Faunadoo');
 const client = new FaunaClient(process.env.FAUNA_SECRET);
+class Schema {
+    constructor(schemaObj) {
+        this.schema = schemaObj;
+    }
+
+    getSchema() {
+        return this.schema;
+    }
+};
 
 const ferret = {
-    Schema: (schemaObj) => {
-        return schemaObj;
-    },
-    
-    model: (modelName, userSchema, collectionName) => {
-        client.query(
-            `Collection('${collectionName}')`
-        )
-        .then(exists => {
-            if (!exists) {
-                console.log("collection name", collectionName);
-                return client.query(`Collection.create('${collectionName}')`)
-            }
-        })
+    Schema,
+
+    model: (modelName, schemaObj, collectionName) => {
+        client.query(`Collection.create({name: '${collectionName}'})`)
         .catch(err => {
-            console.error('Error initializing collection:', err);
+            // console.error('Error initializing collection:', err);
+            console.error('This collection already exists, you are good to go.');
         });
 
-        return new Model(modelName);
+        return new Model(modelName, schemaObj, collectionName);
     }
 };
 
 class Model {
     collectionName;
+    schema;
   
-    constructor(name) {
-      this.collectionName = name
+    constructor(name, schemaObj) {
+        this.collectionName = name;
+        this.schema = schemaObj;
     }
 
     //find all users or find user by specific query
     async find(queryObj) {
         if (typeof queryObj === 'object' && Object.keys(queryObj).length > 0) {
-            console.log('queryObj', queryObj);
-            for (const key in queryObj) {
-                if (queryObj.hasOwnProperty(key)) {
-                    const value = queryObj[key];
-                    if(key == 'age') {
-                        const result = await client.query(
-                            `
-                                let collection = Collection('${this.collectionName}')
-                                collection.where(.${key} == ${value})
-                            `
-                        )
-                        return result;   
-                    } else {
-                        const result = await client.query(
-                            `
-                                let collection = Collection('${this.collectionName}')
-                                collection.where(.${key} == '${value}')
-                            `
-                        )
-                        return result;                        
-                    }
-
-                }
+            const key = Object.keys(queryObj)[0];
+            const value = queryObj[key];
+            const schemaType = this.schema.schema[key];
+    
+            let query;
+    
+            if (schemaType === Number) {
+                query = `
+                    let collection = Collection('${this.collectionName}')
+                    collection.where(.${key} == ${value})
+                `;
+            } else {
+                query = `
+                    let collection = Collection('${this.collectionName}')
+                    collection.where(.${key} == '${value}')
+                `;
             }
+    
+            const result = await client.query(query);
+            return result;
         } else {
-           const result = await client.query(
+            const result = await client.query(
                 `
                     let collection = Collection('${this.collectionName}')
                     collection.all()
@@ -68,17 +66,25 @@ class Model {
             );
             return result;
         }
-    }
+    }    
 
     //add one new user
     async create(data) {
-        console.log('received data', data);
+        const objectToCreate = {};
+    
+        Object.keys(data).forEach(key => {
+            if (this.schema.schema.hasOwnProperty(key)) {
+                objectToCreate[key] = data[key];
+            }
+        });
+    
         const result = await client.query(
             `
                 let collection = Collection('${this.collectionName}')
-                collection.create({'name': '${data.name}', 'email': '${data.email}', 'age': ${data.age}, 'occupation': '${data.occupation}'})
+                collection.create(${JSON.stringify(objectToCreate)})
             `
         );
+    
         return result;
     }
 
@@ -95,15 +101,24 @@ class Model {
 
     //update by id
     async findByIdAndUpdate(id, data) {
+        const objectToUpdate = {};
+    
+        Object.keys(data).forEach(key => {
+            if (this.schema.schema.hasOwnProperty(key)) {
+                objectToUpdate[key] = data[key];
+            }
+        });
+    
         const result = await client.query(
             `
                 let collection = Collection('${this.collectionName}')
                 let toUpdate = collection.byId('${id}')
-                toUpdate.update({name: '${data.name}', email: '${data.email}', age: ${data.age}, occupation: '${data.occupation}'})
+                toUpdate.update(${JSON.stringify(objectToUpdate)})
             `
         );
+    
         return result;
-    }
+    }    
 
     //delete by id
     async findByIdAndDelete(id) {
@@ -120,5 +135,6 @@ class Model {
 
 module.exports = {
     ferret,
+    Schema,
     Model
 }
